@@ -1,0 +1,22 @@
+Model egitimi paketi (kopya) — UI, video cikarimi, GIS/PostGIS, risk, segmentation HARIC.
+
+Calistirma: ana proje kokunden yapilir (orijinal src/ kullanilir).
+Bu klasor tez/rapor icin dosya gruplama ve inceleme amaclidir.
+
+model_egitimi/
+  config.py                 — egitim varsayilanlari, yollar
+  scripts/
+    check_leakage.py        — split sizintisi kontrolu
+  src/
+    01_build_master_index.py
+    02_train.py
+    validate_index.py
+    data/                   — indeks, dataset, split, parser
+    models/                 — ResNet50 + DualBranchGatedFusion
+    training/               — trainer, loss, metrik, checkpoint
+    eval/                   — val protokolu (robustness, thermal cal)
+
+Akis:
+  01_build_master_index → master_index.parquet
+  check_leakage (opsiyonel)
+  02_train --mode fusion → models/dual_branch.pt
