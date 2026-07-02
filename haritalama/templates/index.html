@@ -1,76 +1,415 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Yangin Harita Paneli</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <style>
-    html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; }
-    #map { height: 100%; }
-    .panel {
-      position: absolute; top: 16px; right: 16px; z-index: 1000;
-      background: white; padding: 12px 14px; border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); min-width: 210px;
-    }
-    .panel h1 { font-size: 16px; margin: 0 0 8px; }
-    .panel p { margin: 4px 0; font-size: 13px; }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <div class="panel">
-    <h1>Yangin Harita Paneli</h1>
-    <p>Toplam nokta: <strong id="total">-</strong></p>
-    <p>Yangin noktalari: <strong id="fire-count">-</strong></p>
-    <p>Maks. olasilik: <strong id="max-prob">-</strong></p>
-  </div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').setView([39.0, 35.0], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    function colorFor(probability) {
-      if (probability >= 0.75) return '#dc2626';
-      if (probability >= 0.5) return '#f97316';
-      return '#16a34a';
-    }
-
-    async function loadData() {
-      const stats = await fetch('/api/stats').then(r => r.json());
-      if (stats.status === 'success') {
-        document.getElementById('total').textContent = stats.total;
-        document.getElementById('fire-count').textContent = stats.fire_count;
-        document.getElementById('max-prob').textContent = `${Math.round(stats.max_probability * 1000) / 10}%`;
-      }
-
-      const points = await fetch('/api/points').then(r => r.json());
-      const layer = L.geoJSON(points, {
-        pointToLayer: (feature, latlng) => {
-          const probability = feature.properties.fire_probability || 0;
-          return L.circleMarker(latlng, {
-            radius: probability >= 0.5 ? 7 : 4,
-            color: colorFor(probability),
-            fillColor: colorFor(probability),
-            fillOpacity: 0.75,
-            weight: 1
-          });
-        },
-        onEachFeature: (feature, layer) => {
-          const p = feature.properties;
-          layer.bindPopup(`Frame: ${p.frame_idx}<br>Karar: ${p.prediction}<br>Olasilik: ${(p.fire_probability * 100).toFixed(1)}%`);
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DJI Multimodal Fire Detection Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.85);
+            --text-color: #f8fafc;
+            --accent-glow: #ef4444;
+            --border-color: rgba(255, 255, 255, 0.1);
         }
-      }).addTo(map);
 
-      if (layer.getBounds().isValid()) {
-        map.fitBounds(layer.getBounds().pad(0.2));
-      }
-    }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
 
-    loadData().catch(err => console.error(err));
-  </script>
+        #sidebar {
+            width: 320px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            z-index: 1000;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h1::before {
+            content: '';
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background-color: var(--accent-glow);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-glow), 0 0 20px var(--accent-glow);
+            animation: pulse 2s infinite;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 32px;
+            line-height: 1.5;
+        }
+
+        .stat-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #94a3b8;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-value.danger {
+            color: #ef4444;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        .heatmap-scale {
+            height: 14px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #2563eb 0%, #22c55e 30%, #facc15 58%, #f97316 78%, #ef4444 100%);
+            box-shadow: 0 0 14px rgba(239, 68, 68, 0.25);
+            margin: 10px 0 8px;
+        }
+
+        .heatmap-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #cbd5e1;
+            margin-bottom: 10px;
+        }
+
+        .heatmap-note {
+            font-size: 11px;
+            color: #94a3b8;
+            line-height: 1.45;
+        }
+
+        .heatmap-note strong {
+            color: #f8fafc;
+        }
+
+        #map {
+            flex-grow: 1;
+            height: 100%;
+            background: #000;
+        }
+
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: 600;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 24px;
+            border-radius: 30px;
+            z-index: 2000;
+            backdrop-filter: blur(4px);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: var(--panel-bg);
+            color: #fff;
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+        }
+
+        .leaflet-popup-tip {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="sidebar">
+        <h1>Fire AI Radar</h1>
+        <div class="subtitle">Real-time drone monitoring & environmental risk integration.</div>
+
+        <div class="stat-card">
+            <div class="stat-title">Total Scanned Frames</div>
+            <div class="stat-value" id="val-total">--</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-title">Fire Detected Frames</div>
+            <div class="stat-value danger" id="val-fire">--</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-title">No Fire Frames</div>
+            <div class="stat-value" id="val-no-fire">--</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-title">Max Fire Probability</div>
+            <div class="stat-value" id="val-max">--%</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-title">Heatmap Risk Intensity Scale</div>
+            <div class="heatmap-scale"></div>
+            <div class="heatmap-labels">
+                <span>Low</span>
+                <span>Moderate</span>
+                <span>High</span>
+                <span>Critical</span>
+            </div>
+            <div class="heatmap-note">
+                Heatmap colors combine <strong>fire probability</strong>, repeated observations and spatial density.
+                Blue/green areas are weak signals; orange/red areas indicate persistent high-risk fire activity.
+            </div>
+        </div>
+
+        <div style="flex-grow:1;"></div>
+        <div style="font-size: 11px; color: #64748b; text-align: center;">
+            Powered by PostGIS & GeoServer
+        </div>
+    </div>
+
+    <div id="map"></div>
+    <div id="loader">Syncing telemetry data...</div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const GEOSERVER_WMS_URL = {{ geoserver_wms_url|tojson }};
+        const LAYER_ACTIVE_FIRE = {{ layer_active_fire|tojson }};
+        const LAYER_DRONE_PATH = {{ layer_drone_path|tojson }};
+        const LAYER_FIRE_HEATMAP = {{ layer_fire_heatmap|tojson }};
+
+        const map = L.map('map', { zoomControl: false, maxZoom: 24 }).setView([39.0, 35.0], 6);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap', maxZoom: 24, maxNativeZoom: 19
+        });
+
+        const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; CartoDB', maxZoom: 24, maxNativeZoom: 19
+        });
+
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri', maxZoom: 24, maxNativeZoom: 19
+        });
+
+        darkLayer.addTo(map);
+
+        const getEnvString = (zoom) => {
+            let trackSize = Math.max(2, Math.round(zoom * 0.8));
+            let droneSmall = Math.max(2, Math.round(zoom * 0.25));
+            let droneLarge = Math.max(3, Math.round(zoom * 0.35));
+            let heatRad = Math.max(15, Math.round(zoom * 5));
+            return `track_size:${trackSize};drone_size_small:${droneSmall};drone_size_large:${droneLarge};heatmap_radius:${heatRad}`;
+        };
+
+        L.SingleWMSOverlay = L.Layer.extend({
+            options: { url: '', layers: '', format: 'image/png', transparent: true, version: '1.1.0', env: '', _t: '' },
+            initialize: function(options) { L.setOptions(this, options); },
+            onAdd: function(map) {
+                this._map = map;
+                this._overlays = [];
+                map.on('moveend', this._update, this);
+                map.on('zoomend', this._update, this);
+                map.on('resize', this._update, this);
+                this._update();
+            },
+            onRemove: function(map) {
+                map.off('moveend', this._update, this);
+                map.off('zoomend', this._update, this);
+                map.off('resize', this._update, this);
+                if (this._updateTimer) clearTimeout(this._updateTimer);
+                this._overlays.forEach(layer => map.removeLayer(layer));
+                this._overlays = [];
+            },
+            _update: function() {
+                if (this._updateTimer) clearTimeout(this._updateTimer);
+                this._updateTimer = setTimeout(() => this._doUpdate(), 50);
+            },
+            _doUpdate: function() {
+                if (!this._map || !this.options.url || !this.options.layers) return;
+                const bounds = this._map.getBounds();
+                const size = this._map.getSize();
+                const crs = this._map.options.crs;
+                const nw = crs.project(bounds.getNorthWest());
+                const se = crs.project(bounds.getSouthEast());
+                const bbox = `${nw.x},${se.y},${se.x},${nw.y}`;
+                const params = new URLSearchParams({
+                    service: 'WMS', request: 'GetMap', version: this.options.version,
+                    layers: this.options.layers, format: this.options.format,
+                    transparent: String(this.options.transparent), width: String(Math.round(size.x)),
+                    height: String(Math.round(size.y)), srs: 'EPSG:3857', bbox: bbox,
+                    env: this.options.env || '', _t: this.options._t || ''
+                });
+                const newOverlay = L.imageOverlay(`${this.options.url}?${params.toString()}`, bounds, { opacity: 1, interactive: false });
+                this._currentRequest = newOverlay;
+                newOverlay.on('load', () => {
+                    if (this._currentRequest !== newOverlay) return;
+                    this._overlays.forEach(layer => {
+                        if (layer !== newOverlay && this._map.hasLayer(layer)) this._map.removeLayer(layer);
+                    });
+                    this._overlays = [newOverlay];
+                });
+                newOverlay.addTo(this._map);
+                this._overlays.push(newOverlay);
+            },
+            setParams: function(params, noRedraw) {
+                if (params.env) this.options.env = params.env;
+                if (params._t !== undefined) this.options._t = params._t;
+                if (!noRedraw) this._update();
+            }
+        });
+
+        const initialZoom = map.getZoom();
+        const dronePathLayer = new L.SingleWMSOverlay({ url: GEOSERVER_WMS_URL, layers: LAYER_DRONE_PATH, env: getEnvString(initialZoom), styles: 'drone_path_line' });
+        const fireHeatmapLayer = new L.SingleWMSOverlay({ url: GEOSERVER_WMS_URL, layers: LAYER_FIRE_HEATMAP, env: getEnvString(initialZoom), styles: 'fire_heatmap' });
+        const activeFireTracksLayer = new L.SingleWMSOverlay({ url: GEOSERVER_WMS_URL, layers: LAYER_ACTIVE_FIRE, env: getEnvString(initialZoom), styles: 'active_fire_tracks_style' });
+
+        let fireGeoJSONLayer = L.geoJSON(null, {
+            pointToLayer: function(feature, latlng) {
+                const prob = feature.properties.fire_probability || 0;
+                return L.circleMarker(latlng, {
+                    radius: prob >= 0.75 ? 9 : 6,
+                    fillColor: prob >= 0.75 ? '#ef4444' : '#f97316',
+                    color: '#f8fafc',
+                    weight: 1,
+                    fillOpacity: 0.85
+                });
+            },
+            onEachFeature: function(feature, layer) {
+                const props = feature.properties;
+                const imgUrl = props.image_url || (props.resim_adi ? `/frames/${encodeURIComponent(props.resim_adi)}` : '');
+                const popupContent = `
+                    <div style="text-align:center; min-width: 220px;">
+                        ${imgUrl ? `<img src="${imgUrl}" style="width: 100%; border-radius: 8px; border: 1px solid #334155; margin-bottom: 10px;" alt="Fire Frame">` : '<div style="padding:20px; color:#94a3b8;">Goruntu Yok</div>'}
+                        <div style="font-size: 14px;"><strong>Risk Skoru:</strong> %${props.yangin_yuzdesi}</div>
+                        <div style="font-size: 12px; color: #94a3b8; margin-top: 5px;">${props.zaman}</div>
+                        <a href="https://www.google.com/maps?q=${feature.geometry.coordinates[1]},${feature.geometry.coordinates[0]}" target="_blank" style="display: block; margin-top: 10px; background: #3b82f6; color: white; padding: 8px; text-decoration: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer;">Google Maps'te Ac</a>
+                    </div>
+                `;
+                layer.bindPopup(popupContent, { maxWidth: 300, className: 'custom-popup' });
+            }
+        });
+
+        const activeFireGroup = L.layerGroup([activeFireTracksLayer, fireGeoJSONLayer]).addTo(map);
+
+        const baseMaps = {
+            'Siyah Tema (Dark)': darkLayer,
+            'Uydu Goruntusu': satelliteLayer,
+            'Standart Harita (OSM)': osmLayer
+        };
+        const overlayMaps = {
+            'Drone Yolu': dronePathLayer,
+            'Yangin Noktalari': activeFireGroup,
+            'Yangin Heatmap': fireHeatmapLayer
+        };
+        L.control.layers(baseMaps, overlayMaps, { position: 'topright' }).addTo(map);
+
+        map.on('zoomend', function() {
+            const newEnv = getEnvString(map.getZoom());
+            dronePathLayer.setParams({ env: newEnv }, false);
+            fireHeatmapLayer.setParams({ env: newEnv }, false);
+            activeFireTracksLayer.setParams({ env: newEnv }, false);
+        });
+
+        let lastFrameCount = -1;
+        let isFirstLoad = true;
+
+        function updateDashboard() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('loader').style.display = 'none';
+                    if (data.status !== 'success') {
+                        document.getElementById('loader').style.display = 'block';
+                        document.getElementById('loader').innerText = data.message || 'Veri bekleniyor';
+                        return;
+                    }
+                    if (lastFrameCount === data.stats.toplam) return;
+                    lastFrameCount = data.stats.toplam;
+
+                    document.getElementById('val-total').innerText = data.stats.toplam;
+                    document.getElementById('val-fire').innerText = data.stats.yangin;
+                    document.getElementById('val-no-fire').innerText = data.stats.yangin_degil;
+                    document.getElementById('val-max').innerText = data.stats.max_yuzde + '%';
+
+                    const t = Date.now();
+                    dronePathLayer.setParams({ _t: t }, false);
+                    fireHeatmapLayer.setParams({ _t: t }, false);
+                    activeFireTracksLayer.setParams({ _t: t }, false);
+
+                    fetch('/api/fire-points')
+                        .then(r => r.json())
+                        .then(geojson => {
+                            if (geojson.status === 'error' || geojson.type !== 'FeatureCollection') throw new Error(geojson.message || 'Invalid response');
+                            fireGeoJSONLayer.clearLayers();
+                            fireGeoJSONLayer.addData(geojson);
+                        })
+                        .catch(err => console.error('Fire point error:', err));
+
+                    if (isFirstLoad && data.bounds) {
+                        const bounds = L.latLngBounds(data.bounds[0], data.bounds[1]);
+                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+                        isFirstLoad = false;
+                    }
+                })
+                .catch(err => {
+                    console.error('Fetch hatasi:', err);
+                    if (isFirstLoad) document.getElementById('loader').innerText = 'Baglanti hatasi';
+                });
+        }
+
+        updateDashboard();
+        setInterval(updateDashboard, 2000);
+    </script>
 </body>
+
 </html>
