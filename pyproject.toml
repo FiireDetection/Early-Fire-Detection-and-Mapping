@@ -1,0 +1,38 @@
+# Tooling-only configuration. There is no build backend or installable package
+# defined here on purpose: pip install is driven from requirements.txt and
+# scripts run with src on PYTHONPATH.
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+    "data",
+    "outputs",
+    "models",
+    ".venv",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+# Conservative rule set: pyflakes (F), pycodestyle (E/W), and safe bug checks.
+select = ["F", "E", "W", "SIM", "B"]
+ignore = [
+    "E501",  # line length is configured above
+    "B008",  # function-call default args are intentional in CLI definitions
+    "SIM108", # explicit if/else often reads clearer in this codebase
+    "SIM115", # many CLI scripts open files and exit immediately
+    "SIM117", # nested with-statements are intentional in pipelines
+    "B904",  # raise-from in utility code adds noise here
+    "E741",  # math code may use short variable names
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/fire_detection/cli/*.py" = ["E402"]
+"src/fire_detection/training/__init__.py" = ["F401"]
+"src/fire_detection/inference/__init__.py" = ["F401"]
+"src/fire_detection/data/__init__.py" = ["F401"]
+"src/fire_detection/risk/__init__.py" = ["F401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
