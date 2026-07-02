@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yangin Harita Paneli</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; }
+    #map { height: 100%; }
+    .panel {
+      position: absolute; top: 16px; right: 16px; z-index: 1000;
+      background: white; padding: 12px 14px; border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); min-width: 210px;
+    }
+    .panel h1 { font-size: 16px; margin: 0 0 8px; }
+    .panel p { margin: 4px 0; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="panel">
+    <h1>Yangin Harita Paneli</h1>
+    <p>Toplam nokta: <strong id="total">-</strong></p>
+    <p>Yangin noktalari: <strong id="fire-count">-</strong></p>
+    <p>Maks. olasilik: <strong id="max-prob">-</strong></p>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([39.0, 35.0], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    function colorFor(probability) {
+      if (probability >= 0.75) return '#dc2626';
+      if (probability >= 0.5) return '#f97316';
+      return '#16a34a';
+    }
+
+    async function loadData() {
+      const stats = await fetch('/api/stats').then(r => r.json());
+      if (stats.status === 'success') {
+        document.getElementById('total').textContent = stats.total;
+        document.getElementById('fire-count').textContent = stats.fire_count;
+        document.getElementById('max-prob').textContent = `${Math.round(stats.max_probability * 1000) / 10}%`;
+      }
+
+      const points = await fetch('/api/points').then(r => r.json());
+      const layer = L.geoJSON(points, {
+        pointToLayer: (feature, latlng) => {
+          const probability = feature.properties.fire_probability || 0;
+          return L.circleMarker(latlng, {
+            radius: probability >= 0.5 ? 7 : 4,
+            color: colorFor(probability),
+            fillColor: colorFor(probability),
+            fillOpacity: 0.75,
+            weight: 1
+          });
+        },
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties;
+          layer.bindPopup(`Frame: ${p.frame_idx}<br>Karar: ${p.prediction}<br>Olasilik: ${(p.fire_probability * 100).toFixed(1)}%`);
+        }
+      }).addTo(map);
+
+      if (layer.getBounds().isValid()) {
+        map.fitBounds(layer.getBounds().pad(0.2));
+      }
+    }
+
+    loadData().catch(err => console.error(err));
+  </script>
+</body>
+</html>
