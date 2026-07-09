@@ -100,7 +100,7 @@ We extend our deepest gratitude to the **TUSAŞ (Turkish Aerospace Industries) L
 **Project Team and Advisors:**
 * **Academic Advisor:** Fatma Yerlikaya Öztürk
 * **Industrial Advisor:** Kadir Durdu
-* **Project Team:** Asude Dila Açıkgöz, İlknur Nazlı Koşar, Serhat
+* **Project Team:** Asude Dila Açıkgöz, İlknur Nazlı Koşar, Serhat Erdoğan
 
 ---
 <div align="center">
